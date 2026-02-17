@@ -1,0 +1,12 @@
+# docker-compose.yml
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    # Restart automatically if the container crashes
+    # WHY: In production, you want services to self-heal from transient failures.
+    # "unless-stopped" means: always restart, unless I manually stopped it.
+    restart: unless-stopped
