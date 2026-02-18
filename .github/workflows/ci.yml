@@ -1,0 +1,59 @@
+# This file tells GitHub Actions WHAT to do and WHEN to do it.
+# It lives in your repo, so it's version-controlled just like your code.
+# WHY: "Pipeline as code" means your CI/CD config is reviewable,
+# auditable, and reproducible — core SRE principles.
+
+name: CI Pipeline
+
+# WHEN to run this pipeline:
+on:
+  push:
+    branches: [main]       # Run on every push to main
+  pull_request:
+    branches: [main]       # Run on PRs targeting main
+
+jobs:
+  test:
+    # WHERE to run: a fresh Ubuntu virtual machine provided by GitHub
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Check out your code
+      - name: Checkout code
+        uses: actions/checkout@v4
+        # WHY: The runner starts empty. This copies your repo into it.
+      
+      # Step 2: Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      
+      # Step 4: Run tests
+      - name: Run tests
+        run: pytest test_app.py -v
+  
+  build-docker:
+    # This job runs AFTER tests pass
+    needs: test  # "needs" creates a dependency between jobs
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # Verify the Docker image builds successfully
+      - name: Build Docker image
+        run: docker build -t sre-practice-app:${{ github.sha }} .
+        # ${{ github.sha }} tags the image with the commit hash
+        # WHY: Tagging with the commit hash means you can always trace
+        # a running container back to the exact code that built it.
+        # This is critical during incidents when you need to know
+        # "what version is actually running?"
