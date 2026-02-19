@@ -1,0 +1,17 @@
+# prometheus.yml
+# This tells Prometheus WHERE to collect metrics FROM and HOW OFTEN.
+
+global:
+  scrape_interval: 15s  # Collect metrics every 15 seconds
+  # WHY 15s? It's a balance between freshness and overhead.
+  # Too frequent = too much load on your app. Too infrequent = you miss short spikes.
+
+scrape_configs:
+  # Each "job" is a group of targets to scrape
+  - job_name: "sre-practice-app"
+    # Where is the metrics endpoint?
+    static_configs:
+      - targets: ["app:5000"]
+        # "app" = the service name from docker-compose.yml
+        # Docker Compose creates a network where services can find each other by name
+    metrics_path: "/prometheus"  # The endpoint we created in Step 4.1

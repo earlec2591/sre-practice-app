@@ -1,6 +1,9 @@
 import time
 import random
-from flask import Flask, jsonify
+from flask import Flask, jsonify, Response
+from flask import request as flask_request
+import time as time_module
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
 # Create the Flask application
 # __name__ tells Flask where to find your app's files
@@ -12,6 +15,66 @@ START_TIME = time.time()
 # Simulated metrics storage (in a real app, this would be a database)
 request_count = 0
 
+# === PROMETHEUS METRICS ===
+# These are the "instruments" that Prometheus will read.
+# There are 3 main types:
+
+# COUNTER: A number that only goes UP (like a car's odometer)
+# Use for: total requests, total errors, total bytes sent
+REQUEST_COUNTER = Counter(
+    "http_requests_total",           # Metric name (Prometheus convention: snake_case)
+    "Total number of HTTP requests",  # Description
+    ["method", "endpoint", "status"]  # Labels let you filter (e.g., show only errors)
+)
+
+# HISTOGRAM: Tracks the DISTRIBUTION of values (not just the average)
+# Use for: request duration, response size
+# WHY histogram over average? If 99 requests take 50ms and 1 takes 10s,
+# the average is 149ms — that hides the terrible experience of that 1 user.
+# Histograms give you percentiles (p50, p95, p99) which are much more useful.
+REQUEST_DURATION = Histogram(
+    "http_request_duration_seconds",
+    "Time spent processing request",
+    ["endpoint"]
+)
+
+# GAUGE: A number that can go UP or DOWN (like a speedometer)
+# Use for: current CPU %, active connections, queue depth
+APP_UPTIME = Gauge(
+    "app_uptime_seconds",
+    "Application uptime in seconds"
+)
+
+# === REQUEST HOOKS ===
+# These functions run before and after every request
+
+@app.before_request
+def before_request_func():
+    """Record the start time of each request."""
+    flask_request.start_time = time_module.time()
+
+@app.after_request
+def after_request_func(response):
+    """Record metrics for each request after it completes."""
+    # Calculate how long the request took
+    duration = time_module.time() - flask_request.start_time
+    
+    # Record the request in our counter
+    REQUEST_COUNTER.labels(
+        method=flask_request.method,
+        endpoint=flask_request.path,
+        status=response.status_code
+    ).inc()  # inc() adds 1 to the counter
+    
+    # Record the duration in our histogram
+    REQUEST_DURATION.labels(
+        endpoint=flask_request.path
+    ).observe(duration)  # observe() records the value
+    
+    # Update the uptime gauge
+    APP_UPTIME.set(time_module.time() - START_TIME)
+    
+    return response
 
 # === ROUTES ===
 # Routes map URLs to Python functions.
@@ -71,6 +134,18 @@ def metrics():
         "uptime_seconds": round(uptime_seconds, 2),
         "request_count": request_count
     })
+
+
+@app.route("/prometheus")
+def prometheus_metrics():
+    """Expose metrics in Prometheus format.
+    
+    WHY a separate endpoint? Prometheus has its own text format.
+    The generate_latest() function converts our Python metric objects
+    into that format. Prometheus will hit this endpoint every 15 seconds
+    (configurable) to collect fresh data.
+    """
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 
 @app.route("/simulate/error")

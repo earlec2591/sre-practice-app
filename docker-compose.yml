@@ -10,3 +10,25 @@ services:
     # WHY: In production, you want services to self-heal from transient failures.
     # "unless-stopped" means: always restart, unless I manually stopped it.
     restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      # Mount our config file into the container
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    restart: unless-stopped
+    # WHY volumes? Volumes let you share files between your Mac and the container.
+    # We're saying "take our local prometheus.yml and put it inside the container
+    # at /etc/prometheus/prometheus.yml"
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      # Default login will be admin/admin
+      # In production, you'd NEVER put passwords in docker-compose.
+      # You'd use secrets management. For learning, this is fine.
+    restart: unless-stopped
